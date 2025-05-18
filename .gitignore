@@ -175,3 +175,6 @@ cython_debug/
 
 # Idea
 /.idea
+
+# Outputs
+/sample_files/output
