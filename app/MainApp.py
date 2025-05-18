@@ -1,4 +1,6 @@
+import re
 import shutil
+import tkinter
 import tkinter as tk
 from pathlib import Path
 from tkinter.filedialog import askdirectory
@@ -102,8 +104,17 @@ class HomeScreen(Screen):
 
 
 class RenameScreen(Screen):
+    OBJECT_BEFORE_MAP = 1
+    MAP_BEFORE_OBJECT = 2
+    NUMBER_AFTER_MAP = 1
+    NUMBER_AFTER_OBJECT = 2
+
     def __init__(self, main_app: "MainApp"):
         super().__init__(main_app)
+
+        self.word_position = tkinter.IntVar(value=self.OBJECT_BEFORE_MAP)
+        self.number_position = tkinter.IntVar(value=self.NUMBER_AFTER_MAP)
+        self.renamed_prefix = "T_"
 
         self.files_success = 0
         self.files_error = 0
@@ -117,6 +128,8 @@ class RenameScreen(Screen):
         tk.Label(self.root_frame, text="Source directory").grid(row=0, column=0, sticky="ew")
         self.ent_file = tk.Entry(self.root_frame)
         self.ent_file.grid(row=0, column=1, sticky="ew", padx=5)
+        btn_file = tk.Button(self.root_frame, text="...", command=lambda: self.ask_directory_and_insert_into_entry(self.ent_file))
+        btn_file.grid(row=0, column=2)
 
         tk.Label(self.root_frame, text="File prefix").grid(row=1, column=0, sticky="ew")
         self.ent_prefix = tk.Entry(self.root_frame)
@@ -124,10 +137,24 @@ class RenameScreen(Screen):
         self.ent_prefix.delete(0, tk.END)
         self.ent_prefix.insert(0, "SM_")
 
-        btn_file = tk.Button(self.root_frame, text="...", command=lambda: self.ask_directory_and_insert_into_entry(self.ent_file))
-        btn_file.grid(row=0, column=2)
+        tk.Label(self.root_frame, text="Word position").grid(row=2, column=0, sticky="ew")
+        self.rb_1 = tk.Radiobutton(self.root_frame, text="Object before map", value=self.OBJECT_BEFORE_MAP, variable=self.word_position, command=self.refresh_preview)
+        self.rb_1.grid(row=2, column=1, sticky="ew")
+        self.rb_2 = tk.Radiobutton(self.root_frame, text="Map before object", value=self.MAP_BEFORE_OBJECT, variable=self.word_position, command=self.refresh_preview)
+        self.rb_2.grid(row=2, column=2, sticky="ew")
 
-        tk.Button(self.root_frame, text="Rename", command=self.rename).grid(row=3, column=0, columnspan=3, sticky="ew")
+        tk.Label(self.root_frame, text="Number position").grid(row=3, column=0, sticky="ew")
+        self.rb_3 = tk.Radiobutton(self.root_frame, text="After map", value=self.NUMBER_AFTER_MAP, variable=self.number_position, command=self.refresh_preview)
+        self.rb_3.grid(row=3, column=1, sticky="ew")
+        self.rb_4 = tk.Radiobutton(self.root_frame, text="After object", value=self.NUMBER_AFTER_OBJECT, variable=self.number_position, command=self.refresh_preview)
+        self.rb_4.grid(row=3, column=2, sticky="ew")
+
+        tk.Label(self.root_frame, text="Preview : ").grid(row=4, column=0, sticky="ew")
+        self.preview_label = tk.Label(self.root_frame, text="...")
+        self.preview_label.grid(row=4, column=1, sticky="ew")
+        self.refresh_preview()
+
+        tk.Button(self.root_frame, text="Rename", command=self.rename).grid(row=5, column=0, columnspan=3, sticky="ew")
 
     def rename(self):
         # Init metrics
@@ -153,8 +180,12 @@ class RenameScreen(Screen):
             try:
                 base_name = file.name.split("_M_")[0].split(prefix)[1]
                 map_name = file.name.split(".png")[0].split("_")[-1]
-                fullname = f"T_{map_name}_{base_name}.png"
-                self.rename_file(directory, file.name, output_dir, fullname)
+                search = re.search(r"_\d+", file.name)
+                number = search.group()
+                base_name = base_name.replace(number, "")
+                map_name = map_name.replace(number, "")
+                new_name = self.get_name_from_words(self.renamed_prefix, base_name, map_name, number) + ".png"
+                self.rename_file(directory, file.name, output_dir, new_name)
                 self.files_success += 1
             except:
                 self.main_app.log_error(f"Could not rename {file.name}")
@@ -178,6 +209,24 @@ class RenameScreen(Screen):
         if filepath:
             entry.delete(0, tk.END)
             entry.insert(0, filepath)
+
+    def get_name_from_words(self, prefix, object, map, number):
+        s_result = f"{prefix}"
+        s_object = f"{object}"
+        s_map = f"{map}"
+        if(self.number_position.get()==self.NUMBER_AFTER_OBJECT):
+            s_object += f"{number}"
+        elif(self.number_position.get()==self.NUMBER_AFTER_MAP):
+            s_map += f"{number}"
+        if(self.word_position.get()==self.OBJECT_BEFORE_MAP):
+            s_result += f"{s_object}_{s_map}"
+        elif(self.word_position.get()==self.MAP_BEFORE_OBJECT):
+            s_result += f"{s_map}_{s_object}"
+
+        return s_result
+
+    def refresh_preview(self):
+        self.preview_label.config(text=self.get_name_from_words(self.renamed_prefix, "Cube", "Normal", "_001"))
 
 
 class MainApp:
@@ -212,7 +261,7 @@ class MainApp:
 
         self.body.swap_to_screen(self.screens[ScreenName.RENAME])
 
-        self.log_info("Select a folder that contains texture files")
+        self.log_info("Select a directory that contains texture files")
 
     def change_screen(self, screen: ScreenName):
         return {
